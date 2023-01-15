@@ -15,7 +15,11 @@ namespace test
         private Random random;
 
         private List<Rigidbody> bodyList;
-        
+
+        public static int FPS;
+        private TimeSpan counterElapsed = TimeSpan.Zero;
+        private int fpsCounter = 0;
+
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
@@ -28,10 +32,12 @@ namespace test
 
         protected override void Initialize()
         {
+            Window.Title = "Extraterrestrial physics test | FPS:--- | Memory Usage:---";
+
             random = new Random();
 
             this.bodyList = new List<Rigidbody>();
-            int bodyCount = 10;
+            int bodyCount = 15;
 
             for(int i = 0; i < bodyCount; i++)
             {
@@ -52,7 +58,7 @@ namespace test
                 }
                 else if(type == (int)ShapeType.Box)
                 {
-                    if (!Rigidbody.CreateBox(30f, 30f, new Vector2(x, y), 2f, false, 0.5f, out body, out string errmsg))
+                    if (!Rigidbody.CreateBox(60f, 60f, new Vector2(x, y), 2f, false, 0.5f, out body, out string errmsg))
                     {
                         throw new Exception(errmsg);
                     }
@@ -75,7 +81,6 @@ namespace test
         {
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
-
 
             base.Update(gameTime);
         }
@@ -102,6 +107,17 @@ namespace test
             _spriteBatch.End();
 
             base.Draw(gameTime);
+
+            fpsCounter++;
+            counterElapsed += gameTime.ElapsedGameTime;
+            if (counterElapsed >= TimeSpan.FromSeconds(1))
+            {
+                Window.Title = "Extraterrestrial physics test" + " | FPS: " + fpsCounter.ToString() + " | Memory usage: " + (GC.GetTotalMemory(false) / 1048576f).ToString("F") + " MB";
+
+                FPS = fpsCounter;
+                fpsCounter = 0;
+                counterElapsed -= TimeSpan.FromSeconds(1);
+            }
         }
     }
 }

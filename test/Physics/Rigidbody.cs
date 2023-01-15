@@ -131,7 +131,7 @@ namespace test.Physics
             restituition = Math.Clamp(restituition, 0, 1);
             float mass = area * density;
 
-            body = new Rigidbody(position, density, mass, restituition, area, isStatic, 0, width, height, ShapeType.Circle);
+            body = new Rigidbody(position, density, mass, restituition, area, isStatic, 0, width, height, ShapeType.Box);
             return true;
         }
 
