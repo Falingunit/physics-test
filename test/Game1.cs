@@ -54,7 +54,6 @@ namespace test
                     {
                         throw new Exception(errmsg);
                     }
-
                 }
                 else if(type == (int)ShapeType.Box)
                 {
