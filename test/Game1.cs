@@ -1,20 +1,43 @@
-﻿using Microsoft.Xna.Framework;
+﻿using Flat;
+using Flat.Graphics;
+using Flat.Input;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
-using MonoGame.Extended;
+using PhysicsEngine;
 using System;
 using System.Collections.Generic;
-using test.Physics;
+using System.Diagnostics;
+using System.Net.Http.Headers;
+using System.Xml;
 
 namespace test
 {
     public class Game1 : Game
     {
-        private GraphicsDeviceManager _graphics;
-        private SpriteBatch _spriteBatch;
-        private Random random;
 
-        private List<Rigidbody> bodyList;
+        private GraphicsDeviceManager _graphics;
+        private Screen screen;
+        private Sprites sprites;
+        private Shapes shapes;
+        private Camera camera;
+        private SpriteFont fontConsolas18;
+
+        private World world;
+
+        private Vector2 point;
+        private RigidBody body;
+        private List<Entity> entities;
+        private List<Entity> entitiesRemovalList;
+
+        private Stopwatch watch;
+
+        private int totalBodyCount = 0;
+        private double totalWorldStepTime = 0d;
+        private int totalSampleCount = 0;
+        private Stopwatch sampleTimer = new Stopwatch();
+
+        private string worldStepTimeString = string.Empty;
+        private string bodyCountString = string.Empty;
 
         public static int FPS;
         private TimeSpan counterElapsed = TimeSpan.Zero;
@@ -32,78 +55,165 @@ namespace test
 
         protected override void Initialize()
         {
-            Window.Title = "Extraterrestrial physics test | FPS:--- | Memory Usage:---";
+            this.Window.Title = "Extraterrestrial physics test | FPS:--- | Memory Usage:---";
+            this.Window.AllowUserResizing = true;
 
-            random = new Random();
+            FlatUtil.SetRelativeBackBufferSize(this._graphics, 0.9f);
 
-            this.bodyList = new List<Rigidbody>();
-            int bodyCount = 15;
+            //_graphics.IsFullScreen = true;
+            //_graphics.ApplyChanges();
 
-            for(int i = 0; i < bodyCount; i++)
-            {
-                int type = random.Next(2);
+            this.screen = new Screen(this, 1280, 768);
+            this.sprites = new Sprites(this);
+            this.shapes = new Shapes(this);
+            this.camera = new Camera(this.screen);
+            this.camera.Zoom = 20;
 
-                Rigidbody body = null;
+            this.camera.GetExtents(out float left,out float right, out float bottom, out float top);      
 
-                float x = random.Next(40, 1260-20);
-                float y = random.Next(40, 700-20);
+            world = new World();
 
-                if (type == (int)ShapeType.Circle)
-                {
-                    if(!Rigidbody.CreateCircle(30f, new Vector2(x, y), 2f, false, 0.5f, out body, out string errmsg))
-                    {
-                        throw new Exception(errmsg);
-                    }
-                }
-                else if(type == (int)ShapeType.Box)
-                {
-                    if (!Rigidbody.CreateBox(60f, 60f, new Vector2(x, y), 2f, false, 0.5f, out body, out string errmsg))
-                    {
-                        throw new Exception(errmsg);
-                    }
-                }
+            this.entities = new List<Entity>();
+            this.entitiesRemovalList = new List<Entity>();
 
-                bodyList.Add(body);
-            }
+            float padding = MathF.Abs(right - left) * 0.10f;
+
+            point = new Vector2(right / 2f, top / 2f);
+            Entity entity = new Entity(world, 0.5f, false, new Vector2(right / 2f + 0.5f, top / 2f + 1f));
+            body = entity.Body;
+            Constraint constraint = world.CreateStaticConstraint(point, body, 10f, 1f, 100f);
+
+            entities.Add(entity);
+
+            this.watch = new Stopwatch();
+            this.sampleTimer.Start();
 
             base.Initialize();
         }
 
         protected override void LoadContent()
         {
-            _spriteBatch = new SpriteBatch(GraphicsDevice);
-
-            // TODO: use this.Content to load your game content here
+            this.fontConsolas18 = this.Content.Load<SpriteFont>("Consolas18");
         }
 
         protected override void Update(GameTime gameTime)
         {
-            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
-                Exit();
+            FlatKeyboard keyboard = FlatKeyboard.Instance;
+            FlatMouse mouse = FlatMouse.Instance;
+
+            keyboard.Update();
+            mouse.Update();
+
+            //if (mouse.IsLeftMouseButtonPressed())
+            //{
+            //    float width = RandomHelper.RandomSingle(2f, 3f);
+            //    float height = RandomHelper.RandomSingle(2f, 3f);
+
+            //    if (!RigidBody.CreateBox(width, height, 2, false, 0.6f, 0.6f, out RigidBody body, out string errorMsg))
+            //    {
+            //        throw new Exception(errorMsg);
+            //    }
+
+            //    body.MoveTo(mouse.GetMouseWorldPosition(this, this.screen, this.camera));
+            //    this.world.AddBody(body);
+            //    entities.Add(new(body));
+            //}
+
+            if (mouse.IsRightMouseButtonPressed())
+            {
+                float radius = RandomHelper.RandomSingle(1f, 1.25f);
+
+                if (!RigidBody.CreateCircle(radius, 2, false, 0.6f, 0.6f, out RigidBody body, out string errorMsg))
+                {
+                    throw new Exception(errorMsg);
+                }
+
+                body.MoveTo(mouse.GetMouseWorldPosition(this, this.screen, this.camera));
+                this.world.AddBody(body);
+                entities.Add(new(body));
+            }
+
+            if (mouse.IsLeftMouseButtonPressed())
+            {
+                body.MoveTo(mouse.GetMouseWorldPosition(this, this.screen, this.camera));
+            }
+
+
+            if (this.sampleTimer.Elapsed.TotalSeconds > 1d)
+            {
+                this.bodyCountString = "Body count: " + Math.Round(this.totalBodyCount / (double)this.totalSampleCount, 0).ToString();
+                this.worldStepTimeString = "World step time: " + Math.Round(this.totalWorldStepTime / (double)this.totalSampleCount, 4).ToString();
+                this.totalBodyCount = 0;
+                this.totalSampleCount = 0;
+                this.totalWorldStepTime = 0d;
+                this.sampleTimer.Restart();
+            }
+
+            this.watch.Restart();
+            this.world.Step((float)gameTime.ElapsedGameTime.TotalSeconds, 20);
+            this.watch.Stop();
+
+            this.totalWorldStepTime += this.watch.Elapsed.TotalMilliseconds;
+            this.totalBodyCount += this.world.BodyCount;
+            this.totalSampleCount++;
+
+            this.camera.GetExtents(out _, out _, out float bottom, out _);
+
+            this.entitiesRemovalList.Clear();
+
+            for (int i = 0; i < this.entities.Count; i++)
+            {
+                Entity entity = entities[i];
+                RigidBody body = entities[i].Body;
+                if (body.IsStatic) continue;
+
+                AABB box = body.GetAABB();
+
+                if (box.Max.Y < bottom)
+                {
+                    this.entitiesRemovalList.Add(entity);
+                }
+
+            }
+
+            for(int i = 0; i < entitiesRemovalList.Count; i++)
+            {
+                Entity entity = entitiesRemovalList[i];
+                RigidBody body = entity.Body;
+                this.world.RemoveBody(body);
+                entities.Remove(entity);
+            }
 
             base.Update(gameTime);
         }
 
         protected override void Draw(GameTime gameTime)
         {
-            GraphicsDevice.Clear(Color.DarkBlue);
+            this.screen.Set();
+            GraphicsDevice.Clear(new Color(40, 40, 40));
 
-            _spriteBatch.Begin();
+            this.shapes.Begin(this.camera);
 
-            foreach(var body in bodyList)
+            for (int i = 0; i < this.entities.Count; i++)
             {
-                Vector2 pos = body.Position;
-                if(body.ShapeType == ShapeType.Circle)
-                {
-                    _spriteBatch.DrawCircle(pos, body.Radius, 26, Color.White);
-                }
-                else if(body.ShapeType == ShapeType.Box)
-                {
-                    _spriteBatch.DrawRectangle(pos.X, pos.Y, body.Width, body.Height, Color.Red);
-                }
+                entities[i].Draw(this.shapes);
             }
 
-            _spriteBatch.End();
+            shapes.DrawCircle(point, 10f, 26, Color.White);
+            shapes.DrawCircle(point, 1f, 20, Color.White);
+            shapes.DrawCircle(point, 0.075f, 2, Color.White);
+
+            this.shapes.End();
+            
+            Vector2 stringSize = this.fontConsolas18.MeasureString(this.bodyCountString);
+
+            this.sprites.Begin();
+            this.sprites.DrawString(this.fontConsolas18, this.bodyCountString, new(0, 0), Color.White);
+            this.sprites.DrawString(this.fontConsolas18, this.worldStepTimeString, new(0, stringSize.Y), Color.White);
+            this.sprites.End();
+
+            this.screen.Unset();
+            this.screen.Present(this.sprites);
 
             base.Draw(gameTime);
 
